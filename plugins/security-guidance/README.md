@@ -111,6 +111,21 @@ The plugin writes its own debug log to `~/.claude/security/log.txt` (override wi
 
 The agentic commit reviewer, and every review on a 3rd-party provider, runs an inner Claude Code through the Agent SDK. The plugin starts it with `--no-session-persistence`, so these runs are not saved as session transcripts under `~/.claude/projects/`. Set `SECURITY_GUIDANCE_PERSIST_SESSIONS=1` to keep them, for example to debug a review; a saved transcript contains the full review prompt, including diff hunks, and is removed by Claude Code's normal session cleanup (`cleanupPeriodDays`). A Claude Code older than 2.0.63 does not have the flag; the review then runs without it and is saved as before.
 
+### Review usage and cost
+
+The LLM reviews use your API path, so they cost tokens (or subscription usage) on top of your own session. The default reviewer is the newest Opus model. On the Anthropic API path the diff review on Stop calls the API directly, so it does not appear in Claude Code's own cost figures or transcripts. After each review the plugin writes one line to its debug log:
+
+```
+Review usage: review=stop session=<session id> model=claude-opus-5-5 calls=1 in=31994 out=3250 cache_read=0 cache_write=0 est_cost_usd=0.1930
+```
+
+- `review` is `stop`, `commit` or `push`; `session` is the Claude Code session that triggered it.
+- `calls` counts API requests for the diff review and reviewer runs for the agentic commit/push review, where `model` is the model that was asked for (`opus` by default).
+- `est_cost_usd` is an estimate at list prices, not a bill: on a subscription the review counts against your usage limits instead. A trailing `~` means the model had no entry in the plugin's price table and a default rate was used. A review cut short (timeout, session exit) may not be counted.
+- The log rotates at 1 MB, so copy these lines out if you need a longer history.
+
+To spend less, set `SECURITY_REVIEW_MODEL` (diff review) and `SG_AGENTIC_MODEL` (commit/push review) to a cheaper model, or turn reviews off (see [Enabling/disabling layers](#enablingdisabling-layers)).
+
 ## Limitations
 
 This is a best-effort assistive tool, not a guarantee. Treat findings as suggestions, not as a substitute for human code review, SAST/DAST, dependency scanning, or pen-testing. The reviewer can miss vulnerabilities, produce false positives, and may behave differently across codebases, languages, and model versions. **No warranty is provided** — use is subject to Anthropic's [Commercial Terms](https://www.anthropic.com/legal/commercial-terms).
