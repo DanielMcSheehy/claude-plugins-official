@@ -27,7 +27,7 @@ from pathlib import Path
 # → ~/.claude/security. See _base.state_dir for resolution precedence. Re-aliased
 # here to match the existing local name (state_dir was already a local var in
 # main() and _maybe_emit_user_notice).
-from _base import state_dir as _resolve_state_dir
+from _base import portable_output, state_dir as _resolve_state_dir, write_hook_output
 from _base import llm_reviews_switched_off
 
 # Outcome codes for the sdk_bootstrap metric. Values are stable for telemetry.
@@ -866,7 +866,11 @@ if __name__ == "__main__":
     # SessionStart runs before the user's first prompt; doing this in the
     # background means the first commit-review of the session usually finds
     # the venv ready.
-    print(json.dumps({"async": True, "asyncTimeout": 180000}), flush=True)
+    #
+    # Not printed in portable mode: a host that reads stdout as one JSON
+    # document rejects a second line, and runs this hook to completion anyway.
+    if not portable_output():
+        print(json.dumps({"async": True, "asyncTimeout": 180000}), flush=True)
     t0 = time.perf_counter()
     try:
         outcome, err_phase, err_kind = main()
@@ -947,6 +951,10 @@ if __name__ == "__main__":
     pv = _plugin_version_int()
     if pv:
         metrics["pv"] = pv
+    # See sg-python.sh pass 4: started by real path, the PATH names could
+    # not read the plugin files.
+    if os.environ.get("SG_LAUNCHER_FALLBACK") == "1":
+        metrics["launcher_fallback"] = 1
     response: dict[str, object] = {"metrics": metrics}
     # One-time user-visible notice when the agentic reviewer is dead on
     # arrival. Uses hookSpecificOutput.additionalContext (SessionStart's
@@ -961,4 +969,4 @@ if __name__ == "__main__":
             "additionalContext": notice,
         }
         response["systemMessage"] = notice
-    print(json.dumps(response), flush=True)
+    write_hook_output(response)
